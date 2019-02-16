@@ -1,0 +1,7 @@
+[package]
+name = "find_nearest"
+version = "0.1.0"
+authors = ["M.Kobayashi <nao.kobayashi@nifty.com>"]
+edition = "2018"
+
+[dependencies]
