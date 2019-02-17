@@ -5,6 +5,9 @@ use types::Point;
 use quad_tree::QuadTree;
 
 fn main() {
+    let a: f64 = 137.12345678;
+    let b = a * 1000000.0;
+    println!("{}", b.floor());
 }
 
 
@@ -23,15 +26,19 @@ mod test {
         ];
 
         let target = Point::new(100, "target".to_string(), 61, 50);
-        let qt = QuadTree::new(points);
+        let mut qt = QuadTree::new(points);
+        qt.init();
         let p = qt.convert_point_to_no(&target);
-        println!("{:?}", p);
-        let area = qt.get_area(p.unwrap());
-        assert_eq!(vec![2, 3], area.is_in_points);
+        assert_eq!(vec![3], qt.get_points_in_area(p.unwrap()).unwrap());
 
         let ans = &Point::new(3, "c".to_string(), 55, 45);
         let nearest = qt.get_nearest(&target);
         assert_eq!(Some(ans), nearest);
+
+
+        let ans2 = Point::new(2, "c".to_string(), 50, 40);
+        let nearest2 = qt.get_nearest(&ans2);
+        assert_eq!(Some(&ans2), nearest2);
     }
 
 
@@ -41,16 +48,24 @@ mod test {
             Point::new(0, "a".to_string(), 100, 100),
             Point::new(1, "b".to_string(), 1, 1),
             Point::new(2, "c".to_string(), 50, 40),
-            Point::new(4, "d".to_string(), 60, 70),
+            Point::new(3, "c".to_string(), 51, 41),
+            Point::new(4, "c".to_string(), 52, 43),
+            Point::new(5, "d".to_string(), 60, 70),
+            Point::new(100, "target".to_string(), 53, 44)
         ];
 
-        let target = Point::new(100, "target".to_string(), 61, 50);
-        let qt = QuadTree::new(points);
+        let target = Point::new(100, "target".to_string(), 53, 44);
+        //let target = Point::new(4, "c".to_string(), 52, 43);
+        let mut qt = QuadTree::new(points);
+        qt.init();
         let p = qt.convert_point_to_no(&target);
-        let area = qt.get_area(p.unwrap());
-        assert_eq!(vec![2], area.is_in_points);
+        println!("{:?}", p);
+        println!("{:?}", qt.get_area(p.unwrap()));
+        let mut v =  qt.get_points_in_area(p.unwrap()).unwrap().iter().map(|n| *n).collect::<Vec<usize>>() ;
+        v.sort();
+        assert_eq!(vec![2, 3, 4], v);
 
-        let ans = &Point::new(2, "c".to_string(), 50, 40);
+        let ans = &Point::new(4, "c".to_string(), 52, 43);
         let nearest = qt.get_nearest(&target);
         assert_eq!(Some(ans), nearest);
     }
@@ -63,7 +78,8 @@ mod test {
             points.push(p);
         }
 
-        let qt = QuadTree::new(points.clone());
+        let mut qt = QuadTree::new(points.clone());
+        qt.init();
         for point in points {
             let p_calc = qt.convert_point_to_no(&point);
             let p_normal = qt.get_point(&point);
@@ -81,7 +97,8 @@ mod test {
             points.push(p2);
         }
 
-        let qt = QuadTree::new(points.clone());
+        let mut qt = QuadTree::new(points.clone());
+        qt.init();
         for point in points {
             let p_calc = qt.convert_point_to_no(&point);
             let p_normal = qt.get_point(&point);

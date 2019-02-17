@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::types::Point;
 
 #[derive(Debug, Clone)]
@@ -8,7 +10,6 @@ pub struct Area {
     pub x_end: i32,
     pub y_start: i32,
     pub y_end: i32,
-    pub is_in_points: Vec<usize>,
     pub last: bool,
 }
 
@@ -17,6 +18,7 @@ pub struct Areas {
     x_length: i32,
     y_length: i32,
     area_list: Vec<Area>,
+    points_in_area: BTreeMap<u32, Vec<usize>>
 }
 
 
@@ -26,22 +28,23 @@ impl Areas {
             x_length: 0,
             y_length: 0,
             area_list: Vec::new(),
+            points_in_area: BTreeMap::new(),
         }
     }
 
-    pub fn create(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32, points: &Vec<Point>) {
-        self.create_area(x_start, x_end, y_start, y_end, cur_level, max_level, no, points);
+    pub fn create(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32) {
+        self.create_area(x_start, x_end, y_start, y_end, cur_level, max_level, no);
     }
 
-    fn create_area(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32, points: &Vec<Point>) -> Area {
+    fn create_area(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32) -> Area {
         let x_mid = ((x_end - x_start) / 2) + x_start;
         let y_mid = ((y_end - y_start) / 2) + y_start;
 
         if cur_level  != max_level {
-            let area0 = self.create_area(x_start, x_mid, y_start, y_mid, cur_level + 1, max_level, 4 * no, points);
-            let area1 = self.create_area(x_mid, x_end, y_start, y_mid, cur_level + 1, max_level, 4 * no + 1, points);
-            let area2 = self.create_area(x_start, x_mid, y_mid, y_end, cur_level + 1, max_level, 4 * no + 2, points);
-            let area3 = self.create_area(x_mid, x_end, y_mid, y_end, cur_level + 1, max_level, 4 * no + 3, points);
+            let area0 = self.create_area(x_start, x_mid, y_start, y_mid, cur_level + 1, max_level, 4 * no);
+            let area1 = self.create_area(x_mid, x_end, y_start, y_mid, cur_level + 1, max_level, 4 * no + 1);
+            let area2 = self.create_area(x_start, x_mid, y_mid, y_end, cur_level + 1, max_level, 4 * no + 2);
+            let area3 = self.create_area(x_mid, x_end, y_mid, y_end, cur_level + 1, max_level, 4 * no + 3);
 
             self.area_list.push(area0);
             self.area_list.push(area1);
@@ -55,17 +58,10 @@ impl Areas {
                 x_end,
                 y_start,
                 y_end,
-                is_in_points: Vec::new(),
                 last: false,
             }
 
         } else {
-            let cells = points.iter()
-                .enumerate()
-                .filter(|(_i, p)| x_start <= p.x && x_end >= p.x && y_start <= p.y && y_end >= p.y)
-                .map(|(i, _p)| i)
-                .collect::<Vec<usize>>();
-
             self.x_length = x_end - x_start;
             self.y_length = y_end - y_start;
 
@@ -76,7 +72,6 @@ impl Areas {
                 x_end,
                 y_start,
                 y_end,
-                is_in_points: cells,
                 last: true,
             }
         }
@@ -122,7 +117,7 @@ impl QuadTree {
             .unwrap();
 
         let mut areas = Areas::new();
-        areas.create(min_x, max_x, min_y, max_y, 0, max_level, 0, &points);
+        areas.create(min_x, max_x, min_y, max_y, 0, max_level, 0);
 
         QuadTree {
             points,
@@ -135,11 +130,37 @@ impl QuadTree {
         }
     }
 
+    pub fn init(&mut self) {
+        let mut p_vec = self.points.iter()
+            .enumerate()
+            .map(|(i, p)| (i, p))
+            .collect::<Vec<(usize, &Point)>>();
+
+        println!("xlen:{} ylen:{}", self.areas.x_length, self.areas .y_length);
+
+        while p_vec.len() > 0 {
+            let (i, pnt) = p_vec.pop().unwrap();
+            let no = self.convert_point_to_no(pnt);
+            if let Some(no) = no {
+                println!("{:?} {}", pnt, no);
+                if self.areas.points_in_area.contains_key(&no) {
+                    let arr = self.areas.points_in_area.get_mut(&no).unwrap();
+                    arr.push(i);
+                } else {
+                    let mut arr = Vec::new();
+                    arr.push(i);
+                    self.areas.points_in_area.insert(no, arr);
+                }
+            }
+        }
+    }
+    
     pub fn convert_point_to_no(&self, p: &Point) -> Option<u32> {
         if self.min_x <=  p.x && self.max_x >= p.x && self.min_y <= p.y && self.max_y >= p.y {
             let x = ((p.x - self.min_x) / self.areas.x_length) as u32;
             let y = ((p.y - self.min_y) / self.areas.y_length) as u32;
-            Some(self.bit_separate(x) | self.bit_separate(y) << 1)
+            let z = (self.bit_separate(x) | (self.bit_separate(y) << 1)) as u16;
+            Some(z as u32)
         } else {
             None
         }
@@ -169,8 +190,16 @@ impl QuadTree {
         }
     }
 
-    pub fn get_area(&self, no: u32) -> &Area {
-        let i = self.areas.area_list.iter().position(|a| a.no == no).unwrap_or(0);
+    pub fn get_points_in_area(&self, area_no: u32) -> Option<&[usize]> {
+        if self.areas.points_in_area.contains_key(&area_no) {
+            Some(self.areas.points_in_area[&area_no].as_slice())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_area(&self, area_no: u32) -> &Area {
+        let i = self.areas.area_list.iter().position(|a| a.no == area_no).unwrap_or(0);
         self.areas.area_list.get(i).unwrap()
     }
 
@@ -219,7 +248,7 @@ impl QuadTree {
 
         //別々のvectorからスライスを生成
         let indexes = no_arr.iter()
-            .map(|n| self.get_area(*n).is_in_points.as_slice())
+            .filter_map(|n| self.areas.points_in_area.get(n))
             .flat_map(|u| u.iter())
             .map(|n| *n)
             .collect::<Vec<usize>>();
