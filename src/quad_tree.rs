@@ -6,17 +6,17 @@ use super::types::Point;
 pub struct Area {
     pub level: i32,
     pub no: u32,
-    pub x_start: i32,
-    pub x_end: i32,
-    pub y_start: i32,
-    pub y_end: i32,
+    pub x_start: f64,
+    pub x_end: f64,
+    pub y_start: f64,
+    pub y_end: f64,
     pub last: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct Areas {
-    x_length: i32,
-    y_length: i32,
+    x_length: f64,
+    y_length: f64,
     area_list: Vec<Area>,
     points_in_area: BTreeMap<u32, Vec<usize>>
 }
@@ -25,20 +25,20 @@ pub struct Areas {
 impl Areas {
     pub fn new() -> Self {
         Areas {
-            x_length: 0,
-            y_length: 0,
+            x_length: 0.0,
+            y_length: 0.0,
             area_list: Vec::new(),
             points_in_area: BTreeMap::new(),
         }
     }
 
-    pub fn create(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32) {
+    pub fn create(&mut self, x_start: f64, x_end: f64, y_start: f64, y_end: f64, cur_level: i32, max_level: i32, no: u32) {
         self.create_area(x_start, x_end, y_start, y_end, cur_level, max_level, no);
     }
 
-    fn create_area(&mut self, x_start: i32, x_end: i32, y_start: i32, y_end: i32, cur_level: i32, max_level: i32, no: u32) -> Area {
-        let x_mid = ((x_end - x_start) / 2) + x_start;
-        let y_mid = ((y_end - y_start) / 2) + y_start;
+    fn create_area(&mut self, x_start: f64, x_end: f64, y_start: f64, y_end: f64, cur_level: i32, max_level: i32, no: u32) -> Area {
+        let x_mid = ((x_end - x_start) / 2.0) + x_start;
+        let y_mid = ((y_end - y_start) / 2.0) + y_start;
 
         if cur_level  != max_level {
             let area0 = self.create_area(x_start, x_mid, y_start, y_mid, cur_level + 1, max_level, 4 * no);
@@ -84,10 +84,10 @@ pub struct QuadTree {
     points: Vec<Point>,
     level: i32,
     areas: Areas,
-    max_x: i32,
-    max_y: i32,
-    min_x: i32,
-    min_y: i32,
+    max_x: f64,
+    max_y: f64,
+    min_x: f64,
+    min_y: f64,
 }
 
 impl QuadTree {
@@ -96,24 +96,25 @@ impl QuadTree {
         let max_level = 3;
 
         //空間の最大値と最小化を取得
+        //最大値は+1しないと最大値と同じ点が当たらない。
         let max_x = points.iter()
             .map(|n| n.x)
-            .max()
-            .unwrap();
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap() + 1.0;
 
         let max_y = points.iter()
             .map(|n| n.y)
-            .max()
-            .unwrap();
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap() + 1.0;
 
         let min_x = points.iter()
             .map(|n| n.x)
-            .min()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
 
         let min_y = points.iter()
             .map(|n| n.y)
-            .min()
+            .min_by(|a, b| a.partial_cmp(b).unwrap())
             .unwrap();
 
         let mut areas = Areas::new();
@@ -136,13 +137,10 @@ impl QuadTree {
             .map(|(i, p)| (i, p))
             .collect::<Vec<(usize, &Point)>>();
 
-        println!("xlen:{} ylen:{}", self.areas.x_length, self.areas .y_length);
-
         while p_vec.len() > 0 {
             let (i, pnt) = p_vec.pop().unwrap();
             let no = self.convert_point_to_no(pnt);
             if let Some(no) = no {
-                println!("{:?} {}", pnt, no);
                 if self.areas.points_in_area.contains_key(&no) {
                     let arr = self.areas.points_in_area.get_mut(&no).unwrap();
                     arr.push(i);
@@ -177,7 +175,7 @@ impl QuadTree {
     #[deprecated]
     pub fn get_point(&self, p: &Point) -> Option<u32> {
         let res_vec = self.areas.area_list.iter()
-            .filter(|a| a.last && a.x_start <= p.x && a.x_end >= p.x && a.y_start <= p.y && a.y_end >= p.y)
+            .filter(|a| a.last && a.x_start <= p.x && a.x_end > p.x && a.y_start <= p.y && a.y_end > p.y)
             .map(|a| a.no)
             .collect::<Vec<u32>>();
 
@@ -228,10 +226,12 @@ impl QuadTree {
 
     pub fn get_nearest(&self, p: &Point) -> Option<&Point> {
         //与えられた地点の近傍地を計算する。
-        let p1 = Point::new(101, "".to_string(), p.x + self.areas.x_length, p.y + self.areas.y_length);
-        let p2 = Point::new(101, "".to_string(), p.x - self.areas.x_length, p.y + self.areas.y_length);
-        let p3 = Point::new(101, "".to_string(), p.x + self.areas.x_length, p.y - self.areas.y_length);
-        let p4 = Point::new(101, "".to_string(), p.x - self.areas.x_length, p.y - self.areas.y_length);
+        let delta_x = self.areas.x_length / 2.0;
+        let delta_y = self.areas.y_length / 2.0;
+        let p1 = Point::new(101, "".to_string(), p.x + delta_x, p.y + delta_y);
+        let p2 = Point::new(101, "".to_string(), p.x - delta_x, p.y + delta_y);
+        let p3 = Point::new(101, "".to_string(), p.x + delta_x, p.y - delta_y);
+        let p4 = Point::new(101, "".to_string(), p.x - delta_x, p.y - delta_y);
 
         //指定された地点だけは無かったら終わり。
         let no = {
@@ -245,6 +245,7 @@ impl QuadTree {
         //重複があるので削除
         no_arr.sort();
         no_arr.dedup();
+
 
         //別々のvectorからスライスを生成
         let indexes = no_arr.iter()
@@ -267,6 +268,7 @@ impl QuadTree {
                 .for_each(|i| {
                     let pnt: &Point = self.points.get(*i).unwrap();
                     let distance = (((pnt.x - p.x) as f64).powi(2) + ((pnt.y - p.y) as f64).powi(2)).sqrt();
+
                     if min > distance {
                         min = distance;
                         min_index = *i;
